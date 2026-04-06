@@ -1,16 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { VoyageAIClient } from 'voyageai'
-
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
-const voyage = new VoyageAIClient({ apiKey: process.env.VOYAGE_API_KEY! })
 
 async function generateEmbedding(text: string): Promise<number[]> {
-  const response = await voyage.embed({ input: [text], model: 'voyage-3-lite' })
-  const embedding = response.data?.[0]?.embedding
+  const res = await fetch('https://api.voyageai.com/v1/embeddings', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.VOYAGE_API_KEY}`,
+    },
+    body: JSON.stringify({ input: [text], model: 'voyage-3-lite' }),
+  })
+  const data = await res.json()
+  const embedding = data.data?.[0]?.embedding
   if (!embedding) throw new Error('Failed to generate embedding')
   return embedding
 }
