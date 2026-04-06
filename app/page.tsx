@@ -58,23 +58,11 @@ export default function Home() {
   const [driveStatus, setDriveStatus] = useState<DriveStatus | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<{ text: string; ok: boolean } | null>(null)
-  const [pickerReady, setPickerReady] = useState(false)
+  const pickerReadyRef = useRef(false)
 
   useEffect(() => {
     fetchDocuments()
     fetchDriveStatus()
-
-    // Load the Google API scripts
-    const gapiScript = document.createElement('script')
-    gapiScript.src = 'https://apis.google.com/js/api.js'
-    gapiScript.onload = () => {
-      window.gapi.load('picker', () => setPickerReady(true))
-    }
-    document.body.appendChild(gapiScript)
-
-    const gsiScript = document.createElement('script')
-    gsiScript.src = 'https://accounts.google.com/gsi/client'
-    document.body.appendChild(gsiScript)
 
     // Handle redirect params
     const params = new URLSearchParams(window.location.search)
@@ -96,7 +84,26 @@ export default function Home() {
     setDriveStatus(data)
   }
 
-  const openFolderPicker = useCallback(() => {
+  function loadScript(src: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (document.querySelector(`script[src="${src}"]`)) { resolve(); return }
+      const s = document.createElement('script')
+      s.src = src
+      s.onload = () => resolve()
+      s.onerror = reject
+      document.body.appendChild(s)
+    })
+  }
+
+  const openFolderPicker = useCallback(async () => {
+    // Lazy-load both Google scripts on first click
+    await loadScript('https://accounts.google.com/gsi/client')
+    await loadScript('https://apis.google.com/js/api.js')
+
+    if (!pickerReadyRef.current) {
+      await new Promise<void>(resolve => window.gapi.load('picker', () => { pickerReadyRef.current = true; resolve() }))
+    }
+
     // Get a short-lived access token via the token client
     const tokenClient = (window as unknown as { google: { accounts: { oauth2: { initTokenClient: (opts: object) => { requestAccessToken: (opts: object) => void } } } } }).google.accounts.oauth2.initTokenClient({
       client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!,
@@ -131,7 +138,7 @@ export default function Home() {
       },
     })
     tokenClient.requestAccessToken({ prompt: '' })
-  }, [pickerReady])
+  }, [])
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -297,14 +304,13 @@ export default function Home() {
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               <button
                 onClick={openFolderPicker}
-                disabled={!pickerReady}
                 style={{
                   padding: '7px 14px',
                   borderRadius: '6px',
                   border: '1px solid #cbd5e1',
                   background: 'white',
                   fontSize: '13px',
-                  cursor: pickerReady ? 'pointer' : 'default',
+                  cursor: 'pointer',
                   color: '#334155',
                 }}
               >
